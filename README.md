@@ -35,8 +35,9 @@ Automated Bitcoin technical analysis and reporting system. This n8n workflow fet
    - `Schedule Trigger`: Set execution frequency (default: 4 hours)
    - `Send a message`: Update recipient email address
    - `BTC Price Data`: Configure Google Sheets document ID
-
+<img width="1424" height="568" alt="x" src="https://github.com/user-attachments/assets/da7cac04-0ad8-45dc-ae7f-906dc2339ab7" />
 4. **Activate Workflow**
+
 
 ## 🔧 API Endpoints Used
 
