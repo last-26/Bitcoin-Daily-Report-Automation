@@ -1,44 +1,44 @@
 # Bitcoin Technical Analysis Automation
 
-Otomatik Bitcoin teknik analizi ve raporlama sistemi. n8n üzerinde çalışan bu workflow, Binance'ten canlı veri çekerek detaylı teknik analiz yapar ve AI destekli yorumlarla birlikte e-posta ve Google Sheets'e raporlar.
+Automated Bitcoin technical analysis and reporting system. This n8n workflow fetches live data from Binance, performs comprehensive technical analysis, and delivers AI-powered reports via email and Google Sheets.
 
-## 🎯 Özellikler
+## 🎯 Features
 
-- **Otomatik Veri Toplama**: Binance public API'lerinden 4 saatte bir veri çeker
-- **Kapsamlı Teknik Analiz**: SMA, EMA, RSI, MACD, Bollinger Bands, Stochastic, VWAP, ATR
-- **AI Destekli Yorum**: DeepSeek R1 modeli ile detaylı piyasa analizi
-- **Görsel Raporlama**: HTML formatında profesyonel e-posta raporları
-- **Veri Arşivleme**: Google Sheets'te otomatik kayıt
+- **Automatic Data Collection**: Fetches data from Binance public APIs every 4 hours
+- **Comprehensive Technical Analysis**: SMA, EMA, RSI, MACD, Bollinger Bands, Stochastic, VWAP, ATR
+- **AI-Powered Insights**: Detailed market analysis using DeepSeek R1 model
+- **Visual Reporting**: Professional HTML-formatted email reports
+- **Data Archiving**: Automatic logging to Google Sheets
 
-## 📋 Gereksinimler
+## 📋 Requirements
 
-- n8n kurulumu (self-hosted veya cloud)
-- Gmail hesabı (OAuth2 entegrasyonu)
-- Google Sheets API erişimi
-- OpenRouter API key (DeepSeek R1 modeli için)
+- n8n installation (self-hosted or cloud)
+- Gmail account (OAuth2 integration)
+- Google Sheets API access
+- OpenRouter API key (for DeepSeek R1 model)
 
-**Not**: Binance API key **gerektirmez** - tüm veriler public endpoint'lerden çekilir.
+**Note**: No Binance API key required - all data is fetched from public endpoints.
 
-## 🚀 Kurulum
+## 🚀 Setup
 
-1. **n8n Workflow'u İçe Aktarın**
+1. **Import n8n Workflow**
    ```bash
    n8n import:workflow --input=BTC-Price-Report.json
    ```
 
-2. **Credential'ları Yapılandırın**
-   - Gmail OAuth2 (e-posta gönderimi için)
-   - Google Sheets OAuth2 (veri kayıt için)
-   - OpenRouter Bearer Token (AI analizi için)
+2. **Configure Credentials**
+   - Gmail OAuth2 (for email sending)
+   - Google Sheets OAuth2 (for data logging)
+   - OpenRouter Bearer Token (for AI analysis)
 
-3. **Workflow Ayarları**
-   - `Schedule Trigger`: Çalışma sıklığını ayarlayın (varsayılan: 4 saat)
-   - `Send a message`: E-posta alıcı adresini güncelleyin
-   - `BTC Price Data`: Google Sheets döküman ID'sini ayarlayın
+3. **Workflow Settings**
+   - `Schedule Trigger`: Set execution frequency (default: 4 hours)
+   - `Send a message`: Update recipient email address
+   - `BTC Price Data`: Configure Google Sheets document ID
 
-4. **Workflow'u Aktifleştirin**
+4. **Activate Workflow**
 
-## 🔧 Kullanılan API Endpoint'leri
+## 🔧 API Endpoints Used
 
 ```
 GET https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT
@@ -46,34 +46,34 @@ GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=180
 POST https://openrouter.ai/api/v1/chat/completions
 ```
 
-## 📊 Analiz Kapsamı
+## 📊 Analysis Scope
 
-**Teknik İndikatörler:**
-- Hareketli Ortalamalar: SMA(20,50,200), EMA(12,26), VWAP
+**Technical Indicators:**
+- Moving Averages: SMA(20,50,200), EMA(12,26), VWAP
 - Momentum: RSI(14), Stochastic K, MACD
-- Volatilite: Bollinger Bands, ATR(14)
-- Destek/Direnç: Pivot Points, güncel seviyeler
+- Volatility: Bollinger Bands, ATR(14)
+- Support/Resistance: Pivot Points, current levels
 
-**AI Analiz:**
-- Piyasa durumu değerlendirmesi
-- Kısa/orta vadeli görünüm
-- Al-sat stratejisi önerileri
-- Stop-loss ve take-profit seviyeleri
-- Risk yönetimi tavsiyeleri
+**AI Analysis:**
+- Market condition assessment
+- Short/medium-term outlook
+- Buy-sell strategy recommendations
+- Stop-loss and take-profit levels
+- Risk management advice
 
-## 📧 Rapor Formatı
+## 📧 Report Format
 
-E-posta raporları şunları içerir:
-- Piyasa özeti ve güncel fiyat
-- Detaylı teknik indikatör tabloları
-- AI destekli analiz ve strateji önerileri
-- Kritik destek/direnç seviyeleri
-- Görsel trend göstergeleri
+Email reports include:
+- Market summary and current price
+- Detailed technical indicator tables
+- AI-powered analysis and strategy recommendations
+- Critical support/resistance levels
+- Visual trend indicators
 
-## 📝 Lisans
+## 📝 License
 
 MIT License
 
-## ⚠️ Uyarı
+## ⚠️ Disclaimer
 
-Bu sistem yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi niteliği taşımaz. Kripto para yatırımları yüksek risk içerir. Kendi araştırmanızı yapın ve risk yönetimi ilkelerini uygulayın.
+This system is for informational purposes only and does not constitute investment advice. Cryptocurrency investments carry high risk. Always conduct your own research and apply proper risk management principles.
