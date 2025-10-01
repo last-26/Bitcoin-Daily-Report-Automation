@@ -1,0 +1,419 @@
+{
+  "name": "BTC Price Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1344,
+        -448
+      ],
+      "id": "2c4ebdc4-fed9-4de3-8845-99eb092e6baf",
+      "name": "Schedule Trigger Node"
+    },
+    {
+      "parameters": {
+        "sendTo": "a.sametsoysal@gmail.com",
+        "subject": "🔔 Bitcoin Günlük Analiz Raporu",
+        "message": "={{ $json.emailContent }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        -544
+      ],
+      "id": "cc90ccb8-1ca5-483d-afe0-e4175106dfd2",
+      "name": "Send a message",
+      "webhookId": "4688bc4a-6563-4fb0-b66b-2c745457f7a2",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Sg4HFg13Dnt8L9Iu",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// OpenRouter'dan gelen cevabı ve veri node'unu al\nconst llmResponse = $input.all()[0].json.choices[0].message.content;\nconst priceData = $node[\"Code Node(Veri İşleme)\"].json;\n\n// Tarih formatla\nconst currentDate = priceData.Tarih || new Date().toLocaleString('tr-TR');\n\n// Markdown işaretlerini HTML'e çevir (genişletilmiş)\nconst htmlLlmResponse = llmResponse\n  .replace(/\\*\\*\\*([^*]+)\\*\\*\\*/g, '<strong><em>$1</em></strong>')\n  .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')\n  .replace(/\\*([^*]+)\\*/g, '<em>$1</em>')\n  .replace(/^### (.+)$/gm, '<h4>$1</h4>')\n  .replace(/^## (.+)$/gm, '<h3>$1</h3>')\n  .replace(/^# (.+)$/gm, '<h2>$1</h2>')\n  .replace(/^- (.+)$/gm, '• $1')\n  .replace(/^\\d+\\. (.+)$/gm, '<strong>$1</strong>')\n  .replace(/\\n\\n/g, '</p><p>')\n  .replace(/\\n/g, '<br>')\n  .replace(/^/, '<p>')\n  .replace(/$/, '</p>');\n\n// Güvenli formatlama fonksiyonları\nconst formatPrice = (value) => {\n  if (!value || isNaN(value)) return 'N/A';\n  return `$${parseFloat(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;\n};\n\nconst formatNumber = (value, decimals = 2) => {\n  if (!value || isNaN(value)) return 'N/A';\n  return parseFloat(value).toFixed(decimals);\n};\n\nconst formatPercent = (value) => {\n  if (value === null || value === undefined || isNaN(value)) return 'N/A';\n  const num = parseFloat(value);\n  const color = num > 0 ? '#28a745' : num < 0 ? '#dc3545' : '#6c757d';\n  const arrow = num > 0 ? '↑' : num < 0 ? '↓' : '→';\n  return `<span style=\"color: ${color}; font-weight: bold;\">${arrow} %${num.toFixed(2)}</span>`;\n};\n\nconst formatVolume = (value) => {\n  if (!value || isNaN(value)) return 'N/A';\n  const num = parseFloat(value);\n  if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;\n  if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;\n  if (num >= 1e3) return `${(num / 1e3).toFixed(2)}K`;\n  return num.toFixed(2);\n};\n\n// Trend göstergesi\nconst getTrendIndicator = (trend, strength) => {\n  const indicators = {\n    'Güçlü Yükseliş': '🚀',\n    'Yükseliş': '📈',\n    'Yatay': '➡️',\n    'Düşüş': '📉',\n    'Güçlü Düşüş': '⚠️'\n  };\n  const color = trend?.includes('Yükseliş') ? '#28a745' : \n                trend?.includes('Düşüş') ? '#dc3545' : '#6c757d';\n  return `<span style=\"color: ${color}; font-size: 1.2em;\">${indicators[trend] || '❓'} ${trend || 'Belirsiz'} (Güç: ${strength || 0}/5)</span>`;\n};\n\n// RSI durumu\nconst getRSIStatus = (rsi) => {\n  if (!rsi || isNaN(rsi)) return { text: 'N/A', color: '#6c757d' };\n  const value = parseFloat(rsi);\n  if (value >= 70) return { text: 'Aşırı Alım 🔴', color: '#dc3545' };\n  if (value >= 60) return { text: 'Güçlü 📈', color: '#ffc107' };\n  if (value >= 40) return { text: 'Nötr ➡️', color: '#6c757d' };\n  if (value >= 30) return { text: 'Zayıf 📉', color: '#ffc107' };\n  return { text: 'Aşırı Satım 🟢', color: '#28a745' };\n};\n\nconst rsiStatus = getRSIStatus(priceData.RSI14);\n\n// Sinyal durumu\nconst getSignalBadge = (signal, score) => {\n  const colors = {\n    'AL': '#28a745',\n    'SAT': '#dc3545',\n    'BEKLE': '#ffc107',\n    'NÖTR': '#6c757d'\n  };\n  const color = colors[signal] || '#6c757d';\n  return `<span style=\"background-color: ${color}; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold;\">${signal || 'BEKLE'} (${score || 0}/5)</span>`;\n};\n\n// Aktif sinyalleri formatla\nconst formatActiveSignals = (signals) => {\n  if (!signals || !Array.isArray(signals) || signals.length === 0) {\n    return '<li>Aktif sinyal bulunmuyor</li>';\n  }\n  return signals.map(s => `<li>${s}</li>`).join('');\n};\n\n// HTML formatında geliştirilmiş mail\nconst finalEmail = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"UTF-8\">\n  <style>\n    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; }\n    .container { max-width: 800px; margin: 0 auto; padding: 20px; }\n    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; }\n    .header h1 { margin: 0; font-size: 28px; }\n    .header p { margin: 10px 0 0 0; opacity: 0.9; }\n    .content { background: white; padding: 30px; border: 1px solid #e0e0e0; border-radius: 0 0 10px 10px; }\n    .section { margin-bottom: 30px; }\n    .section h2 { color: #667eea; border-bottom: 2px solid #667eea; padding-bottom: 10px; margin-bottom: 20px; }\n    .section h3 { color: #764ba2; margin-top: 20px; }\n    .data-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; }\n    .data-item { background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #667eea; }\n    .data-label { font-size: 12px; color: #6c757d; margin-bottom: 5px; }\n    .data-value { font-size: 18px; font-weight: bold; color: #212529; }\n    table { width: 100%; border-collapse: collapse; margin: 20px 0; }\n    th { background: #f8f9fa; padding: 12px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; }\n    td { padding: 12px; border-bottom: 1px solid #dee2e6; }\n    .indicator-box { background: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin: 15px 0; border-radius: 5px; }\n    .signal-box { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 20px; border-radius: 10px; margin: 20px 0; }\n    .ai-analysis { background: #f0f4ff; border-left: 5px solid #4c6ef5; padding: 20px; margin: 20px 0; border-radius: 5px; }\n    .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin-top: 30px; border-radius: 5px; }\n    .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 12px; }\n    .badge { display: inline-block; padding: 5px 10px; border-radius: 5px; font-weight: bold; margin: 0 5px; }\n    .trend-up { color: #28a745; }\n    .trend-down { color: #dc3545; }\n    .trend-neutral { color: #6c757d; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>🤖 KRİPTO PARA ANALİZ RAPORU</h1>\n      <p>📅 ${currentDate} | Bitcoin (BTC/USDT) Detaylı Teknik Analiz</p>\n    </div>\n    \n    <div class=\"content\">\n      <div class=\"section\">\n        <h2>📊 PİYASA ÖZETİ</h2>\n        \n        <div class=\"data-grid\">\n          <div class=\"data-item\">\n            <div class=\"data-label\">💵 GÜNCEL FİYAT</div>\n            <div class=\"data-value\">${formatPrice(priceData.GuncelFiyat)}</div>\n          </div>\n          <div class=\"data-item\">\n            <div class=\"data-label\">📈 24 SAAT DEĞİŞİM</div>\n            <div class=\"data-value\">${formatPercent(priceData.Degisim24s)}</div>\n          </div>\n          <div class=\"data-item\">\n            <div class=\"data-label\">📊 24S HACİM (BTC)</div>\n            <div class=\"data-value\">${formatVolume(priceData.Hacim)}</div>\n          </div>\n          <div class=\"data-item\">\n            <div class=\"data-label\">💰 24S HACİM (USDT)</div>\n            <div class=\"data-value\">${formatVolume(priceData.HacimUSDT)}</div>\n          </div>\n        </div>\n        \n        <table>\n          <tr>\n            <th>📊 Metrik</th>\n            <th>📈 Değer</th>\n            <th>📊 Metrik</th>\n            <th>📈 Değer</th>\n          </tr>\n          <tr>\n            <td><strong>24s En Yüksek</strong></td>\n            <td>${formatPrice(priceData.EnYuksek24s)}</td>\n            <td><strong>24s En Düşük</strong></td>\n            <td>${formatPrice(priceData.EnDusuk24s)}</td>\n          </tr>\n          <tr>\n            <td><strong>Volatilite (24s)</strong></td>\n            <td>%${formatNumber(priceData.Volatilite24s)}</td>\n            <td><strong>ATR(14)</strong></td>\n            <td>${formatPrice(priceData.ATR14)}</td>\n          </tr>\n        </table>\n      </div>\n      \n      <div class=\"section\">\n        <h2>📈 TEKNİK İNDİKATÖRLER</h2>\n        \n        <div class=\"signal-box\">\n          <h3 style=\"margin-top: 0;\">🎯 Mevcut Durum</h3>\n          <p><strong>Trend:</strong> ${getTrendIndicator(priceData.Trend, priceData.TrendGucu)}</p>\n          <p><strong>Sinyal:</strong> ${getSignalBadge(priceData.Sinyal, priceData.SinyalPuani)}</p>\n          <p><strong>Aktif Sinyaller:</strong></p>\n          <ul style=\"margin: 10px 0;\">\n            ${formatActiveSignals(priceData.AktifSinyaller)}\n          </ul>\n        </div>\n        \n        <h3>📊 Hareketli Ortalamalar</h3>\n        <table>\n          <tr>\n            <th>Gösterge</th>\n            <th>Değer</th>\n            <th>Fiyat Pozisyonu</th>\n          </tr>\n          <tr>\n            <td><strong>SMA(20)</strong></td>\n            <td>${formatPrice(priceData.SMA20)}</td>\n            <td>${priceData.FiyatVsSMA20 || 'N/A'}</td>\n          </tr>\n          <tr>\n            <td><strong>SMA(50)</strong></td>\n            <td>${formatPrice(priceData.SMA50)}</td>\n            <td>${priceData.FiyatVsSMA50 || 'N/A'}</td>\n          </tr>\n          <tr>\n            <td><strong>SMA(200)</strong></td>\n            <td>${formatPrice(priceData.SMA200)}</td>\n            <td>${priceData.GuncelFiyat > priceData.SMA200 ? 'Üstünde ✅' : 'Altında ❌'}</td>\n          </tr>\n          <tr>\n            <td><strong>EMA(12)</strong></td>\n            <td>${formatPrice(priceData.EMA12)}</td>\n            <td rowspan=\"2\" style=\"vertical-align: middle;\">MACD: ${formatNumber(priceData.MACD)}</td>\n          </tr>\n          <tr>\n            <td><strong>EMA(26)</strong></td>\n            <td>${formatPrice(priceData.EMA26)}</td>\n          </tr>\n          <tr>\n            <td><strong>VWAP</strong></td>\n            <td>${formatPrice(priceData.VWAP)}</td>\n            <td>${priceData.FiyatVsVWAP || 'N/A'}</td>\n          </tr>\n        </table>\n        \n        <h3>📉 Momentum Göstergeleri</h3>\n        <div class=\"indicator-box\">\n          <p><strong>RSI(14):</strong> ${formatNumber(priceData.RSI14)} - <span style=\"color: ${rsiStatus.color}; font-weight: bold;\">${rsiStatus.text}</span></p>\n          <p><strong>Stochastic K:</strong> ${formatNumber(priceData.StochasticK)}</p>\n          <p><strong>MACD:</strong> ${formatNumber(priceData.MACD)} ${priceData.MACD > 0 ? '📈 Pozitif' : '📉 Negatif'}</p>\n        </div>\n        \n        <h3>📊 Bollinger Bantları</h3>\n        <table>\n          <tr>\n            <th>Bant</th>\n            <th>Seviye</th>\n            <th>Durum</th>\n          </tr>\n          <tr>\n            <td><strong>Üst Bant</strong></td>\n            <td>${formatPrice(priceData.BB_Ust)}</td>\n            <td rowspan=\"3\" style=\"vertical-align: middle;\">\n              Bant Genişliği: ${formatPrice(priceData.BB_Genislik)}<br>\n              ${priceData.GuncelFiyat > priceData.BB_Ust ? '⚠️ Üst Bandın Üstünde' : \n                priceData.GuncelFiyat < priceData.BB_Alt ? '⚠️ Alt Bandın Altında' : \n                '✅ Bantlar İçinde'}\n            </td>\n          </tr>\n          <tr>\n            <td><strong>Orta Bant</strong></td>\n            <td>${formatPrice(priceData.BB_Orta)}</td>\n          </tr>\n          <tr>\n            <td><strong>Alt Bant</strong></td>\n            <td>${formatPrice(priceData.BB_Alt)}</td>\n          </tr>\n        </table>\n      </div>\n      \n      <div class=\"section\">\n        <h2>🎯 KRİTİK SEVİYELER</h2>\n        \n        <div class=\"data-grid\">\n          <div class=\"data-item\" style=\"border-left-color: #dc3545;\">\n            <div class=\"data-label\">🔴 DİRENÇ 1</div>\n            <div class=\"data-value\">${formatPrice(priceData.Direnc1)}</div>\n          </div>\n          <div class=\"data-item\" style=\"border-left-color: #dc3545;\">\n            <div class=\"data-label\">🔴 ANA DİRENÇ</div>\n            <div class=\"data-value\">${formatPrice(priceData.Direnc)}</div>\n          </div>\n          <div class=\"data-item\" style=\"border-left-color: #ffc107;\">\n            <div class=\"data-label\">⚖️ PİVOT</div>\n            <div class=\"data-value\">${formatPrice(priceData.Pivot)}</div>\n          </div>\n          <div class=\"data-item\" style=\"border-left-color: #28a745;\">\n            <div class=\"data-label\">🟢 ANA DESTEK</div>\n            <div class=\"data-value\">${formatPrice(priceData.Destek)}</div>\n          </div>\n          <div class=\"data-item\" style=\"border-left-color: #28a745;\">\n            <div class=\"data-label\">🟢 DESTEK 1</div>\n            <div class=\"data-value\">${formatPrice(priceData.Destek1)}</div>\n          </div>\n        </div>\n      </div>\n      \n      <div class=\"section\">\n        <h2>🤖 AI DESTEKLİ ANALİZ VE STRATEJİ</h2>\n        \n        <div class=\"ai-analysis\">\n          ${htmlLlmResponse}\n        </div>\n      </div>\n      \n      <div class=\"warning\">\n        <strong>⚠️ ÖNEMLİ UYARI:</strong><br>\n        Bu rapor yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi niteliği taşımaz. \n        Kripto para piyasaları yüksek volatiliteye sahiptir ve ani değişimler gösterebilir. \n        Yatırım kararlarınızı vermeden önce kendi araştırmanızı yapın ve risk yönetimi ilkelerini uygulayın.\n      </div>\n      \n      <div class=\"footer\">\n        <p>🔄 Bu rapor otomatik sistem tarafından oluşturulmuştur</p>\n        <p>📧 Sorularınız için destek ekibiyle iletişime geçebilirsiniz</p>\n        <p>© 2025 Kripto Analiz Sistemi | Tüm hakları saklıdır</p>\n      </div>\n    </div>\n  </div>\n</body>\n</html>\n`;\n\n// Çıktı objesi\nreturn [{\n  json: {\n    emailContent: finalEmail,\n    llmAnalysis: llmResponse,\n    priceData: priceData,\n    metadata: {\n      generatedAt: new Date().toISOString(),\n      symbol: priceData.Symbol || 'BTCUSDT',\n      currentPrice: priceData.GuncelFiyat,\n      trend: priceData.Trend,\n      signal: priceData.Sinyal,\n      rsi: priceData.RSI14,\n      support: priceData.Destek,\n      resistance: priceData.Direnc\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        -544
+      ],
+      "id": "2dc28bba-7aff-4b6a-a102-4e3216781789",
+      "name": "Code Node(LLM Cevap İşleme)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"deepseek/deepseek-r1:free\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Sen deneyimli bir kripto para teknik analisti ve yatırım danışmanısın. Teknik göstergeleri (SMA, EMA, RSI, MACD, Bollinger Bantları, Stochastic) profesyonelce yorumlayarak detaylı piyasa analizi yaparsın. Verdiğin analizler net, aksiyona yönelik ve risk yönetimi içerir. Türkçe yanıt ver, markdown kullanma, HTML formatında düz metin olarak yaz.\"\n    },\n    {\n      \"role\": \"user\", \n      \"content\": \"Bitcoin Teknik Analiz Raporu:\\n\\n📊 GÜNCEL FİYAT VERİLERİ:\\n• Fiyat: ${{ $json.GuncelFiyat }}\\n• 24s Değişim: %{{ $json.Degisim24s }} (${{ $json.DegisimUSD }})\\n• 24s Hacim: {{ $json.Hacim }} BTC ({{ $json.HacimUSDT }} USDT)\\n• 24s En Yüksek: ${{ $json.EnYuksek24s }}\\n• 24s En Düşük: ${{ $json.EnDusuk24s }}\\n• Volatilite: %{{ $json.Volatilite24s }}\\n\\n📈 HAREKETLI ORTALAMALAR:\\n• SMA20: ${{ $json.SMA20 }} (Fiyat {{ $json.FiyatVsSMA20 }})\\n• SMA50: ${{ $json.SMA50 }} (Fiyat {{ $json.FiyatVsSMA50 }})\\n• SMA200: ${{ $json.SMA200 }}\\n• EMA12: ${{ $json.EMA12 }}\\n• EMA26: ${{ $json.EMA26 }}\\n• VWAP: ${{ $json.VWAP }} (Fiyat {{ $json.FiyatVsVWAP }})\\n\\n📊 TEKNİK İNDİKATÖRLER:\\n• RSI(14): {{ $json.RSI14 }}\\n• Stochastic K: {{ $json.StochasticK }}\\n• MACD: {{ $json.MACD }}\\n• ATR(14): {{ $json.ATR14 }}\\n\\n📉 BOLLINGER BANTLARI:\\n• Üst Bant: ${{ $json.BB_Ust }}\\n• Orta Bant: ${{ $json.BB_Orta }}\\n• Alt Bant: ${{ $json.BB_Alt }}\\n• Bant Genişliği: ${{ $json.BB_Genislik }}\\n\\n🎯 DESTEK/DİRENÇ SEVİYELERİ:\\n• Ana Direnç: ${{ $json.Direnc }}\\n• Direnç 1: ${{ $json.Direnc1 }}\\n• Pivot: ${{ $json.Pivot }}\\n• Ana Destek: ${{ $json.Destek }}\\n• Destek 1: ${{ $json.Destek1 }}\\n\\n📌 PİYASA DURUMU:\\n• Trend: {{ $json.Trend }} (Güç: {{ $json.TrendGucu }}/5)\\n• Sinyal: {{ $json.Sinyal }} (Puan: {{ $json.SinyalPuani }}/5)\\n• Aktif Sinyaller: {{ $json.AktifSinyaller }}\\n\\nBu verilere dayanarak:\\n1. Mevcut piyasa durumunun detaylı teknik analizini yap\\n2. Kısa vadeli (1-3 gün) ve orta vadeli (1-2 hafta) görünümü değerlendir\\n3. Kritik seviyeleri ve bunların önemini açıkla\\n4. Risk/Ödül oranı ile birlikte net al-sat stratejisi öner\\n5. Stop-loss ve take-profit seviyeleri belirle\\n6. Piyasadaki potansiyel senaryoları ve olasılıklarını değerlendir\\n7. Risk yönetimi önerileri sun\"\n    }\n  ],\n  \"max_tokens\": 4000,\n  \"temperature\": 0.65,\n  \"top_p\": 0.9,\n  \"frequency_penalty\": 0.3,\n  \"presence_penalty\": 0.1\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -448,
+        -544
+      ],
+      "id": "2e3c5ef9-916d-4e3d-977f-72be4dd5cd2b",
+      "name": "HTTP Request - OpenRouter",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "g6iidoytISBXtgNp",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1-JQU-g2jXheeBY16PpgyJqxUbL76bmd-OzjX-7zig-s",
+          "mode": "list",
+          "cachedResultName": "Crypto_Analysis_Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1-JQU-g2jXheeBY16PpgyJqxUbL76bmd-OzjX-7zig-s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sayfa1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1-JQU-g2jXheeBY16PpgyJqxUbL76bmd-OzjX-7zig-s/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Symbol": "={{ $json.Symbol }}",
+            "Fiyat": "={{ $json.GuncelFiyat }}",
+            "Degisim24s": "={{ $json.Degisim24s }}",
+            "Hacim": "={{ $json.Hacim }}",
+            "EnYuksek": "={{ $json.EnYuksek24s }}",
+            "EnDusuk": "={{ $json.EnDusuk24s }}",
+            "Tarih": "={{ $json.Tarih }}",
+            "Trend": "={{ $json.Trend }}",
+            "Indikator": "={{ $json.AktifSinyaller }}",
+            "Sinyal": "={{ $json.Sinyal }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Tarih",
+              "displayName": "Tarih",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Symbol",
+              "displayName": "Symbol",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fiyat",
+              "displayName": "Fiyat",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Degisim24s",
+              "displayName": "Degisim24s",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Hacim",
+              "displayName": "Hacim",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "EnYuksek",
+              "displayName": "EnYuksek",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "EnDusuk",
+              "displayName": "EnDusuk",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Trend",
+              "displayName": "Trend",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Sinyal",
+              "displayName": "Sinyal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Indikator",
+              "displayName": "Indikator",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -448,
+        -352
+      ],
+      "id": "c96a57ea-d20f-4a73-a4fe-7a8aba4be97b",
+      "name": "BTC Price Data",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "xH8mgU0eqLxXPMho",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=180",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1120,
+        -352
+      ],
+      "id": "119a7992-d34e-4571-86b4-5cea84d2a6ad",
+      "name": "HTTP Request - Binance"
+    },
+    {
+      "parameters": {
+        "url": "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1120,
+        -544
+      ],
+      "id": "c6fdf5c2-32df-4c0f-ae2c-8a155c5e9373",
+      "name": "HTTP Request - Current Price"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -896,
+        -448
+      ],
+      "id": "7ebe2e82-4361-429c-936d-41ce17a80ff5",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// N8N Merge Node - JSON wrapped data için düzeltilmiş versiyon\nconst items = $input.all();\nconsole.log(\"Toplam item sayısı:\", items.length);\n\n// Ticker verisi - ilk item'ın json property'sinde\nconst tickerData = items[0].json;\nconsole.log(\"Ticker bulundu:\", tickerData.symbol, \"- Fiyat:\", tickerData.lastPrice);\n\n// Kline verilerini topla - her item'ın json property'sinden\nconst klines = [];\n\nitems.forEach((item, index) => {\n  // json property'sine bak\n  const data = item.json;\n  \n  // Eğer data'da \"0\" key'i varsa, bu bir kline verisi\n  if (data && data[\"0\"] !== undefined) {\n    const kline = [];\n    for (let i = 0; i <= 11; i++) {\n      kline[i] = data[i.toString()];\n    }\n    klines.push(kline);\n  }\n});\n\nconsole.log(\"Toplam kline sayısı:\", klines.length);\n\n// Eğer hala kline yoksa, ilk item'ın json'ında da kline var mı kontrol et\nif (klines.length === 0 && items[0].json[\"0\"] !== undefined) {\n  console.log(\"Kline verisi ilk item'da bulundu\");\n  const kline = [];\n  for (let i = 0; i <= 11; i++) {\n    kline[i] = items[0].json[i.toString()];\n  }\n  klines.push(kline);\n}\n\n// Sonraki item'lardan da kline topla\nfor (let itemIdx = 1; itemIdx < items.length; itemIdx++) {\n  if (items[itemIdx].json && items[itemIdx].json[\"0\"] !== undefined) {\n    const kline = [];\n    for (let i = 0; i <= 11; i++) {\n      kline[i] = items[itemIdx].json[i.toString()];\n    }\n    klines.push(kline);\n  }\n}\n\nconsole.log(\"Final kline sayısı:\", klines.length);\nif (klines.length > 0) {\n  console.log(\"İlk kline:\", klines[0][0], klines[0][4]); // timestamp ve close\n  console.log(\"Son kline:\", klines[klines.length-1][0], klines[klines.length-1][4]);\n}\n\n// Fiyat dizilerini oluştur\nconst opens = [];\nconst highs = [];\nconst lows = [];\nconst closes = [];\nconst volumes = [];\n\nklines.forEach(kline => {\n  opens.push(parseFloat(kline[1]));\n  highs.push(parseFloat(kline[2]));\n  lows.push(parseFloat(kline[3]));\n  closes.push(parseFloat(kline[4]));\n  volumes.push(parseFloat(kline[5]));\n});\n\nconsole.log(\"Closes sayısı:\", closes.length);\nconsole.log(\"Son 5 kapanış:\", closes.slice(-5));\n\nconst currentPrice = parseFloat(tickerData.lastPrice);\n\n// === TEKNİK İNDİKATÖRLER ===\n\nfunction sma(prices, period) {\n  if (!prices || prices.length < period) return null;\n  const sum = prices.slice(-period).reduce((a, b) => a + b, 0);\n  return parseFloat((sum / period).toFixed(2));\n}\n\nfunction ema(prices, period) {\n  if (!prices || prices.length < period) return null;\n  const k = 2 / (period + 1);\n  let emaValue = sma(prices.slice(0, period), period);\n  \n  for (let i = period; i < prices.length; i++) {\n    emaValue = prices[i] * k + emaValue * (1 - k);\n  }\n  return parseFloat(emaValue.toFixed(2));\n}\n\nfunction rsi(prices, period = 14) {\n  if (!prices || prices.length < period + 1) return null;\n  \n  const changes = [];\n  for (let i = 1; i < prices.length; i++) {\n    changes.push(prices[i] - prices[i - 1]);\n  }\n  \n  let gains = 0;\n  let losses = 0;\n  \n  for (let i = 0; i < period && i < changes.length; i++) {\n    if (changes[i] > 0) gains += changes[i];\n    else losses -= changes[i];\n  }\n  \n  let avgGain = gains / period;\n  let avgLoss = losses / period;\n  \n  for (let i = period; i < changes.length; i++) {\n    if (changes[i] > 0) {\n      avgGain = (avgGain * (period - 1) + changes[i]) / period;\n      avgLoss = (avgLoss * (period - 1)) / period;\n    } else {\n      avgGain = (avgGain * (period - 1)) / period;\n      avgLoss = (avgLoss * (period - 1) - changes[i]) / period;\n    }\n  }\n  \n  if (avgLoss === 0) return 100;\n  const rs = avgGain / avgLoss;\n  return parseFloat((100 - (100 / (1 + rs))).toFixed(2));\n}\n\nfunction macd(prices) {\n  if (!prices || prices.length < 26) return null;\n  const ema12 = ema(prices, 12);\n  const ema26 = ema(prices, 26);\n  if (!ema12 || !ema26) return null;\n  \n  return {\n    macd: parseFloat((ema12 - ema26).toFixed(2)),\n    ema12: ema12,\n    ema26: ema26\n  };\n}\n\nfunction bollingerBands(prices, period = 20, stdDev = 2) {\n  if (!prices || prices.length < period) return null;\n  const smaValue = sma(prices, period);\n  if (!smaValue) return null;\n  \n  const recentPrices = prices.slice(-period);\n  const variance = recentPrices.reduce((sum, price) => \n    sum + Math.pow(price - smaValue, 2), 0) / period;\n  const standardDeviation = Math.sqrt(variance);\n  \n  return {\n    upper: parseFloat((smaValue + (stdDev * standardDeviation)).toFixed(2)),\n    middle: smaValue,\n    lower: parseFloat((smaValue - (stdDev * standardDeviation)).toFixed(2)),\n    bandwidth: parseFloat((2 * stdDev * standardDeviation).toFixed(2))\n  };\n}\n\nfunction stochastic(highs, lows, closes, period = 14) {\n  if (!highs || !lows || !closes || closes.length < period) return null;\n  \n  const recentHighs = highs.slice(-period);\n  const recentLows = lows.slice(-period);\n  const currentClose = closes[closes.length - 1];\n  \n  const highestHigh = Math.max(...recentHighs);\n  const lowestLow = Math.min(...recentLows);\n  \n  if (highestHigh === lowestLow) return null;\n  \n  const k = ((currentClose - lowestLow) / (highestHigh - lowestLow)) * 100;\n  return parseFloat(k.toFixed(2));\n}\n\nfunction vwap(highs, lows, closes, volumes, period = 20) {\n  if (!highs || !lows || !closes || !volumes || closes.length < period) return null;\n  \n  const startIdx = Math.max(0, closes.length - period);\n  let sumPriceVolume = 0;\n  let sumVolume = 0;\n  \n  for (let i = startIdx; i < closes.length; i++) {\n    const typicalPrice = (highs[i] + lows[i] + closes[i]) / 3;\n    sumPriceVolume += typicalPrice * volumes[i];\n    sumVolume += volumes[i];\n  }\n  \n  return sumVolume > 0 ? parseFloat((sumPriceVolume / sumVolume).toFixed(2)) : null;\n}\n\nfunction atr(highs, lows, closes, period = 14) {\n  if (!highs || !lows || !closes || closes.length < period + 1) return null;\n  \n  const trueRanges = [];\n  for (let i = 1; i < closes.length; i++) {\n    const highLow = highs[i] - lows[i];\n    const highClose = Math.abs(highs[i] - closes[i - 1]);\n    const lowClose = Math.abs(lows[i] - closes[i - 1]);\n    trueRanges.push(Math.max(highLow, highClose, lowClose));\n  }\n  \n  if (trueRanges.length < period) return null;\n  const avgTrueRange = trueRanges.slice(-period).reduce((a, b) => a + b, 0) / period;\n  return parseFloat(avgTrueRange.toFixed(2));\n}\n\n// Hesaplamalar\nconst sma20 = sma(closes, 20);\nconst sma50 = sma(closes, 50);\nconst sma200 = closes.length >= 200 ? sma(closes, 200) : null;\nconst ema12 = ema(closes, 12);\nconst ema26 = ema(closes, 26);\nconst rsi14 = rsi(closes, 14);\nconst macdData = macd(closes);\nconst bb = bollingerBands(closes, 20, 2);\nconst stochK = stochastic(highs, lows, closes, 14);\nconst vwapValue = vwap(highs, lows, closes, volumes, 20);\nconst atr14 = atr(highs, lows, closes, 14);\n\n// Destek/Direnç\nconst recentHighs = highs.slice(-48);\nconst recentLows = lows.slice(-48);\nconst resistance = recentHighs.length > 0 ? Math.max(...recentHighs) : null;\nconst support = recentLows.length > 0 ? Math.min(...recentLows) : null;\n\n// Pivot\nconst high24 = parseFloat(tickerData.highPrice);\nconst low24 = parseFloat(tickerData.lowPrice);\nconst pivot = (high24 + low24 + currentPrice) / 3;\nconst r1 = (2 * pivot) - low24;\nconst s1 = (2 * pivot) - high24;\n\n// Trend\nlet trend = \"Belirsiz\";\nlet trendStrength = 0;\n\nif (sma20 && sma50) {\n  if (sma200) {\n    if (sma20 > sma50 && sma50 > sma200) {\n      trend = \"Güçlü Yükseliş\";\n      trendStrength = 3;\n    } else if (sma20 < sma50 && sma50 < sma200) {\n      trend = \"Güçlü Düşüş\";\n      trendStrength = -3;\n    }\n  }\n  \n  if (trendStrength === 0) {\n    if (sma20 > sma50) {\n      trend = \"Yükseliş\";\n      trendStrength = 1;\n    } else if (sma20 < sma50) {\n      trend = \"Düşüş\";\n      trendStrength = -1;\n    } else {\n      trend = \"Yatay\";\n    }\n  }\n}\n\n// Sinyaller\nlet signalPoints = 0;\nconst signals = [];\n\nif (rsi14) {\n  if (rsi14 < 30) {\n    signals.push(\"RSI aşırı satım (<30)\");\n    signalPoints += 2;\n  } else if (rsi14 < 40) {\n    signals.push(\"RSI satım bölgesi\");\n    signalPoints += 1;\n  } else if (rsi14 > 70) {\n    signals.push(\"RSI aşırı alım (>70)\");\n    signalPoints -= 2;\n  } else if (rsi14 > 60) {\n    signals.push(\"RSI alım bölgesi\");\n    signalPoints -= 1;\n  }\n}\n\nif (sma20 && sma50) {\n  if (currentPrice > sma20 && currentPrice > sma50) {\n    signals.push(\"Fiyat MA'ların üstünde\");\n    signalPoints += 1;\n  } else if (currentPrice < sma20 && currentPrice < sma50) {\n    signals.push(\"Fiyat MA'ların altında\");\n    signalPoints -= 1;\n  }\n  \n  if (sma20 > sma50 * 1.01) {\n    signals.push(\"Golden Cross\");\n    signalPoints += 2;\n  } else if (sma20 < sma50 * 0.99) {\n    signals.push(\"Death Cross\");\n    signalPoints -= 2;\n  }\n}\n\nif (bb) {\n  if (currentPrice <= bb.lower * 1.01) {\n    signals.push(\"Fiyat BB alt bandında\");\n    signalPoints += 2;\n  } else if (currentPrice >= bb.upper * 0.99) {\n    signals.push(\"Fiyat BB üst bandında\");\n    signalPoints -= 2;\n  }\n}\n\nif (macdData) {\n  if (macdData.macd > 0) {\n    signals.push(\"MACD pozitif\");\n    signalPoints += 1;\n  } else {\n    signals.push(\"MACD negatif\");\n    signalPoints -= 1;\n  }\n}\n\nif (stochK !== null) {\n  if (stochK < 20) {\n    signals.push(\"Stochastic aşırı satım\");\n    signalPoints += 2;\n  } else if (stochK > 80) {\n    signals.push(\"Stochastic aşırı alım\");\n    signalPoints -= 2;\n  }\n}\n\nif (vwapValue && currentPrice) {\n  if (currentPrice > vwapValue) {\n    signals.push(\"Fiyat VWAP üstünde\");\n    signalPoints += 1;\n  } else {\n    signals.push(\"Fiyat VWAP altında\");\n    signalPoints -= 1;\n  }\n}\n\nlet signal = \"BEKLE\";\nif (signalPoints >= 4) signal = \"GÜÇLÜ AL\";\nelse if (signalPoints >= 2) signal = \"AL\";\nelse if (signalPoints <= -4) signal = \"GÜÇLÜ SAT\";\nelse if (signalPoints <= -2) signal = \"SAT\";\n\n// Volatilite\nconst last24hHighs = highs.slice(-24);\nconst last24hLows = lows.slice(-24);\nconst volatility = last24hHighs.length > 0 && last24hLows.length > 0 ?\n  ((Math.max(...last24hHighs) - Math.min(...last24hLows)) / Math.min(...last24hLows) * 100) : null;\n\n// Output\nconst output = {\n  Tarih: new Date().toLocaleString('tr-TR', {\n    timeZone: 'Europe/Istanbul',\n    year: 'numeric',\n    month: '2-digit',\n    day: '2-digit',\n    hour: '2-digit',\n    minute: '2-digit',\n    second: '2-digit'\n  }),\n  Symbol: tickerData.symbol || \"BTCUSDT\",\n  \n  GuncelFiyat: currentPrice,\n  Degisim24s: parseFloat(tickerData.priceChangePercent),\n  DegisimUSD: parseFloat(tickerData.priceChange),\n  Hacim: parseFloat(tickerData.volume),\n  HacimUSDT: parseFloat(tickerData.quoteVolume),\n  EnYuksek24s: high24,\n  EnDusuk24s: low24,\n  \n  SMA20: sma20,\n  SMA50: sma50,\n  SMA200: sma200,\n  EMA12: ema12,\n  EMA26: ema26,\n  \n  RSI14: rsi14,\n  StochasticK: stochK,\n  \n  MACD: macdData ? macdData.macd : null,\n  MACD_EMA12: macdData ? macdData.ema12 : null,\n  MACD_EMA26: macdData ? macdData.ema26 : null,\n  \n  BB_Ust: bb ? bb.upper : null,\n  BB_Orta: bb ? bb.middle : null,\n  BB_Alt: bb ? bb.lower : null,\n  BB_Genislik: bb ? bb.bandwidth : null,\n  \n  VWAP: vwapValue,\n  \n  ATR14: atr14,\n  Volatilite24s: volatility ? parseFloat(volatility.toFixed(2)) : null,\n  \n  Destek: support ? parseFloat(support.toFixed(2)) : null,\n  Direnc: resistance ? parseFloat(resistance.toFixed(2)) : null,\n  Pivot: parseFloat(pivot.toFixed(2)),\n  Direnc1: parseFloat(r1.toFixed(2)),\n  Destek1: parseFloat(s1.toFixed(2)),\n  \n  Trend: trend,\n  TrendGucu: trendStrength,\n  Sinyal: signal,\n  SinyalPuani: signalPoints,\n  AktifSinyaller: signals,\n  \n  FiyatVsSMA20: sma20 ? \n    `${currentPrice > sma20 ? 'Üstünde' : 'Altında'} (${((currentPrice - sma20) / sma20 * 100).toFixed(2)}%)` : \"N/A\",\n  FiyatVsSMA50: sma50 ? \n    `${currentPrice > sma50 ? 'Üstünde' : 'Altında'} (${((currentPrice - sma50) / sma50 * 100).toFixed(2)}%)` : \"N/A\",\n  FiyatVsVWAP: vwapValue ? \n    `${currentPrice > vwapValue ? 'Üstünde' : 'Altında'} (${((currentPrice - vwapValue) / vwapValue * 100).toFixed(2)}%)` : \"N/A\",\n  \n  Meta: {\n    KlinesSayisi: klines.length,\n    VeriKalitesi: klines.length >= 168 ? \"Tam (7 gün)\" : `${klines.length}/168`,\n    GuncellemeZamani: new Date().toISOString()\n  }\n};\n\nconsole.log(\"\\n===== ÖZET =====\");\nconsole.log(\"Kline Sayısı:\", klines.length);\nconsole.log(\"Fiyat: $\" + currentPrice);\nconsole.log(\"RSI:\", rsi14);\nconsole.log(\"SİNYAL:\", signal);\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        -448
+      ],
+      "id": "38cdc340-7965-4f85-be13-f6dc4b1ffb51",
+      "name": "Code Node(Veri İşleme)"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger Node": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Current Price",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request - Binance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node(LLM Cevap İşleme)": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Code Node(LLM Cevap İşleme)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BTC Price Data": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request - Binance": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Current Price": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code Node(Veri İşleme)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node(Veri İşleme)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - OpenRouter",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "BTC Price Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8572db05-2328-4a4f-abb9-f33460211af0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "42c7fd3c52d92444ea652e774161c13d936ef920645da1c0ed2874a0adee8f5f"
+  },
+  "id": "z8Z97lR33SCrEIMz",
+  "tags": []
+}
